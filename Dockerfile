@@ -1,5 +1,13 @@
+# jnaapti-nginx-proxy
+# Build using: sudo docker build -t "jnaapti-nginx-proxy:0.0.1" --rm=true --no-cache .
+# Run as: docker run --name "jnaapti-nginx-proxy" -d -p 80:80 -v /var/run/docker.sock:/tmp/docker.sock jnaapti-nginx-proxy:0.0.1
+#
+# NAME             jnaapti-nginx-proxy
+# VERSION          0.0.1
+# LAST_UPDATED     2015-04-11 16:30
+
 FROM nginx:1.7.11
-MAINTAINER Jason Wilder jwilder@litl.com
+MAINTAINER Radhakrishna radhakrishna@jnaapti.com
 
 # Install wget and install/updates certificates
 RUN apt-get update \

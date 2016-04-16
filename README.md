@@ -1,4 +1,4 @@
-![nginx 1.7.11](https://img.shields.io/badge/nginx-1.7.11-brightgreen.svg) ![License MIT](https://img.shields.io/badge/license-MIT-blue.svg)
+![nginx 1.9.12](https://img.shields.io/badge/nginx-1.9.12-brightgreen.svg) ![License MIT](https://img.shields.io/badge/license-MIT-blue.svg) [![Build](https://circleci.com/gh/jwilder/nginx-proxy.svg?&style=shield&circle-token=2da3ee844076a47371bd45da81cf27409ca7306a)](https://circleci.com/gh/jwilder/nginx-proxy) [![Build Status](https://travis-ci.org/jwilder/nginx-proxy.svg?branch=master)](https://travis-ci.org/jwilder/nginx-proxy)
 
 nginx-proxy sets up a container running nginx and [docker-gen][1].  docker-gen generates reverse proxy configs for nginx and reloads nginx when containers are started and stopped.
 
@@ -8,13 +8,20 @@ See [Automated Nginx Reverse Proxy for Docker][2] for why you might want to use 
 
 To run it:
 
-    $ docker run -d -p 80:80 -v /var/run/docker.sock:/tmp/docker.sock jwilder/nginx-proxy
+    $ docker run -d -p 80:80 -v /var/run/docker.sock:/tmp/docker.sock:ro jwilder/nginx-proxy
 
 Then start any containers you want proxied with an env var `VIRTUAL_HOST=subdomain.youdomain.com`
 
     $ docker run -e VIRTUAL_HOST=foo.bar.com  ...
 
+The containers being proxied must [expose](https://docs.docker.com/reference/run/#expose-incoming-ports) the port to be proxied, either by using the `EXPOSE` directive in their `Dockerfile` or by using the `--expose` flag to `docker run` or `docker create`.
+
 Provided your DNS is setup to forward foo.bar.com to the a host running nginx-proxy, the request will be routed to a container with the VIRTUAL_HOST env var set.
+
+### Docker-compose
+
+Currently this does not work with the new v2 syntax of docker-compose (due to not being compatible with the new network overlay see [#304](https://github.com/jwilder/nginx-proxy/issues/304)). It does work when using the old docker-composer syntax.
+
 
 ### Multiple Ports
 
@@ -35,6 +42,13 @@ You can also use wildcards at the beginning and the end of host name, like `*.ba
 
 If you would like to connect to your backend using HTTPS instead of HTTP, set `VIRTUAL_PROTO=https` on the backend container.
 
+### Default Host
+
+To set the default host for nginx use the env var `DEFAULT_HOST=foo.bar.com` for example
+
+    $ docker run -d -p 80:80 -e DEFAULT_HOST=foo.bar.com -v /var/run/docker.sock:/tmp/docker.sock:ro jwilder/nginx-proxy
+
+
 ### Separate Containers
 
 nginx-proxy can also be run as two separate containers using the [jwilder/docker-gen](https://index.docker.io/u/jwilder/docker-gen/)
@@ -53,9 +67,9 @@ Then start the docker-gen container with the shared volume and template:
 
 ```
 $ docker run --volumes-from nginx \
-    -v /var/run/docker.sock:/tmp/docker.sock \
+    -v /var/run/docker.sock:/tmp/docker.sock:ro \
     -v $(pwd):/etc/docker-gen/templates \
-    -t docker-gen -notify-sighup nginx -watch -only-published /etc/docker-gen/templates/nginx.tmpl /etc/nginx/conf.d/default.conf
+    -t jwilder/docker-gen -notify-sighup nginx -watch -only-exposed /etc/docker-gen/templates/nginx.tmpl /etc/nginx/conf.d/default.conf
 ```
 
 Finally, start your containers with `VIRTUAL_HOST` environment variables.
@@ -69,16 +83,22 @@ certificates or optionally specifying a cert name (for SNI) as an environment va
 
 To enable SSL:
 
-    $ docker run -d -p 80:80 -p 443:443 -v /path/to/certs:/etc/nginx/certs -v /var/run/docker.sock:/tmp/docker.sock jwilder/nginx-proxy
+    $ docker run -d -p 80:80 -p 443:443 -v /path/to/certs:/etc/nginx/certs -v /var/run/docker.sock:/tmp/docker.sock:ro jwilder/nginx-proxy
 
 The contents of `/path/to/certs` should contain the certificates and private keys for any virtual
 hosts in use.  The certificate and keys should be named after the virtual host with a `.crt` and
 `.key` extension.  For example, a container with `VIRTUAL_HOST=foo.bar.com` should have a
 `foo.bar.com.crt` and `foo.bar.com.key` file in the certs directory.
 
+#### Diffie-Hellman Groups
+
+If you have Diffie-Hellman groups enabled, the files should be named after the virtual host with a
+`dhparam` suffix and `.pem` extension. For example, a container with `VIRTUAL_HOST=foo.bar.com`
+should have a `foo.bar.com.dhparam.pem` file in the certs directory.
+
 #### Wildcard Certificates
 
-Wildcard certificates and keys should be name after the domain name with a `.crt` and `.key` extension.
+Wildcard certificates and keys should be named after the domain name with a `.crt` and `.key` extension.
 For example `VIRTUAL_HOST=foo.bar.com` would use cert name `bar.com.crt` and `bar.com.key`.
 
 #### SNI
@@ -108,22 +128,41 @@ a 503.
 
 ### Basic Authentication Support
 
-In order to be able to securize your virtual host, you have to create a file named as its equivalent VIRTUAL_HOST variable on directory
+In order to be able to secure your virtual host, you have to create a file named as its equivalent VIRTUAL_HOST variable on directory
 /etc/nginx/htpasswd/$VIRTUAL_HOST
 
 ```
 $ docker run -d -p 80:80 -p 443:443 \
     -v /path/to/htpasswd:/etc/nginx/htpasswd \
     -v /path/to/certs:/etc/nginx/certs \
-    -v /var/run/docker.sock:/tmp/docker.sock \
+    -v /var/run/docker.sock:/tmp/docker.sock:ro \
     jwilder/nginx-proxy
 ```
 
-You'll need apache2-utils on the machine you plan to create de htpasswd file. Follow these [instructions](http://httpd.apache.org/docs/2.2/programs/htpasswd.html)
+You'll need apache2-utils on the machine where you plan to create the htpasswd file. Follow these [instructions](http://httpd.apache.org/docs/2.2/programs/htpasswd.html)
 
 ### Custom Nginx Configuration
 
 If you need to configure Nginx beyond what is possible using environment variables, you can provide custom configuration files on either a proxy-wide or per-`VIRTUAL_HOST` basis.
+
+#### Replacing default proxy settings
+
+If you want to replace the default proxy settings for the nginx container, add a configuration file at `/etc/nginx/proxy.conf`. A file with the default settings would
+look like this:
+
+```Nginx
+# HTTP 1.1 support
+proxy_http_version 1.1;
+proxy_buffering off;
+proxy_set_header Host $http_host;
+proxy_set_header Upgrade $http_upgrade;
+proxy_set_header Connection $proxy_connection;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $proxy_x_forwarded_proto;
+```
+
+***NOTE***: If you provide this file it will replace the defaults; you may want to check the .tmpl file to make sure you have all of the needed options.
 
 #### Proxy-wide
 
@@ -141,20 +180,55 @@ RUN { \
 
 Or it can be done by mounting in your custom configuration in your `docker run` command:
 
-    $ docker run -d -p 80:80 -p 443:443 -v /path/to/my_proxy.conf:/etc/nginx/conf.d/my_proxy.conf:ro -v /var/run/docker.sock:/tmp/docker.sock jwilder/nginx-proxy
+    $ docker run -d -p 80:80 -p 443:443 -v /path/to/my_proxy.conf:/etc/nginx/conf.d/my_proxy.conf:ro -v /var/run/docker.sock:/tmp/docker.sock:ro jwilder/nginx-proxy
 
 #### Per-VIRTUAL_HOST
 
-To add settings on a per-`VIRTUAL_HOST` basis, add your configuration file under `/etc/nginx/vhost.d`. Unlike in the proxy-wide case, which allows mutliple config files with any name ending in `.conf`, the per-`VIRTUAL_HOST` file must be named exactly after the `VIRTUAL_HOST`.
+To add settings on a per-`VIRTUAL_HOST` basis, add your configuration file under `/etc/nginx/vhost.d`. Unlike in the proxy-wide case, which allows multiple config files with any name ending in `.conf`, the per-`VIRTUAL_HOST` file must be named exactly after the `VIRTUAL_HOST`.
 
 In order to allow virtual hosts to be dynamically configured as backends are added and removed, it makes the most sense to mount an external directory as `/etc/nginx/vhost.d` as opposed to using derived images or mounting individual configuration files.
 
 For example, if you have a virtual host named `app.example.com`, you could provide a custom configuration for that host as follows:
 
-    $ docker run -d -p 80:80 -p 443:443 -v /path/to/vhost.d:/etc/nginx/vhost.d:ro -v /var/run/docker.sock:/tmp/docker.sock jwilder/nginx-proxy
+    $ docker run -d -p 80:80 -p 443:443 -v /path/to/vhost.d:/etc/nginx/vhost.d:ro -v /var/run/docker.sock:/tmp/docker.sock:ro jwilder/nginx-proxy
     $ { echo 'server_tokens off;'; echo 'client_max_body_size 100m;'; } > /path/to/vhost.d/app.example.com
 
 If you are using multiple hostnames for a single container (e.g. `VIRTUAL_HOST=example.com,www.example.com`), the virtual host configuration file must exist for each hostname. If you would like to use the same configuration for multiple virtual host names, you can use a symlink:
 
     $ { echo 'server_tokens off;'; echo 'client_max_body_size 100m;'; } > /path/to/vhost.d/www.example.com
-    $ ln -s www.example.com /path/to/vhost.d/example.com
+    $ ln -s /path/to/vhost.d/www.example.com /path/to/vhost.d/example.com
+
+#### Per-VIRTUAL_HOST default configuration
+
+If you want most of your virtual hosts to use a default single configuration and then override on a few specific ones, add those settings to the `/etc/nginx/vhost.d/default` file. This file
+will be used on any virtual host which does not have a `/etc/nginx/vhost.d/{VIRTUAL_HOST}` file associated with it.
+
+#### Per-VIRTUAL_HOST location configuration
+
+To add settings to the "location" block on a per-`VIRTUAL_HOST` basis, add your configuration file under `/etc/nginx/vhost.d`
+just like the previous section except with the suffix `_location`.
+
+For example, if you have a virtual host named `app.example.com` and you have configured a proxy_cache `my-cache` in another custom file, you could tell it to use a proxy cache as follows:
+
+    $ docker run -d -p 80:80 -p 443:443 -v /path/to/vhost.d:/etc/nginx/vhost.d:ro -v /var/run/docker.sock:/tmp/docker.sock:ro jwilder/nginx-proxy
+    $ { echo 'proxy_cache my-cache;'; echo 'proxy_cache_valid  200 302  60m;'; echo 'proxy_cache_valid  404 1m;' } > /path/to/vhost.d/app.example.com_location
+
+If you are using multiple hostnames for a single container (e.g. `VIRTUAL_HOST=example.com,www.example.com`), the virtual host configuration file must exist for each hostname. If you would like to use the same configuration for multiple virtual host names, you can use a symlink:
+
+    $ { echo 'proxy_cache my-cache;'; echo 'proxy_cache_valid  200 302  60m;'; echo 'proxy_cache_valid  404 1m;' } > /path/to/vhost.d/app.example.com_location
+    $ ln -s /path/to/vhost.d/www.example.com /path/to/vhost.d/example.com
+
+#### Per-VIRTUAL_HOST location default configuration
+
+If you want most of your virtual hosts to use a default single `location` block configuration and then override on a few specific ones, add those settings to the `/etc/nginx/vhost.d/default_location` file. This file
+will be used on any virtual host which does not have a `/etc/nginx/vhost.d/{VIRTUAL_HOST}` file associated with it.
+
+### Contributing
+
+Before submitting pull requests or issues, please check github to make sure an existing issue or pull request is not already open.
+
+#### Running Tests Locally
+
+To run tests, you'll need to install [bats 0.4.0](https://github.com/sstephenson/bats).
+
+    make test

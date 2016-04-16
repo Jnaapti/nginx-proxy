@@ -1,12 +1,12 @@
 # jnaapti-nginx-proxy
 # Build using: sudo docker build -t "jnaapti-nginx-proxy:0.0.1" --rm=true --no-cache .
-# Run as: docker run --name "jnaapti-nginx-proxy" -d -p 80:80 -v /var/run/docker.sock:/tmp/docker.sock jnaapti-nginx-proxy:0.0.1
+# Run as: docker run --name "jnaapti-nginx-proxy" -e DEFAULT_HOST=mydev.jnaapti.com -d -p 80:80 -v /var/run/docker.sock:/tmp/docker.sock:ro jnaapti-nginx-proxy:0.0.1
 #
 # NAME             jnaapti-nginx-proxy
 # VERSION          0.0.1
-# LAST_UPDATED     2015-04-11 16:30
+# LAST_UPDATED     2016-04-16 12:45
 
-FROM nginx:1.7.11
+FROM nginx:1.9.12
 MAINTAINER Radhakrishna radhakrishna@jnaapti.com
 
 # Install wget and install/updates certificates
@@ -21,11 +21,11 @@ RUN apt-get update \
 RUN echo "daemon off;" >> /etc/nginx/nginx.conf \
  && sed -i 's/^http {/&\n    server_names_hash_bucket_size 128;/g' /etc/nginx/nginx.conf
 
- # Install Forego
-RUN wget -P /usr/local/bin https://godist.herokuapp.com/projects/ddollar/forego/releases/current/linux-amd64/forego \
- && chmod u+x /usr/local/bin/forego
+# Install Forego
+ADD https://github.com/jwilder/forego/releases/download/v0.16.1/forego /usr/local/bin/forego
+RUN chmod u+x /usr/local/bin/forego
 
-ENV DOCKER_GEN_VERSION 0.3.9
+ENV DOCKER_GEN_VERSION 0.7.0
 
 RUN wget https://github.com/jwilder/docker-gen/releases/download/$DOCKER_GEN_VERSION/docker-gen-linux-amd64-$DOCKER_GEN_VERSION.tar.gz \
  && tar -C /usr/local/bin -xvzf docker-gen-linux-amd64-$DOCKER_GEN_VERSION.tar.gz \
@@ -38,4 +38,5 @@ ENV DOCKER_HOST unix:///tmp/docker.sock
 
 VOLUME ["/etc/nginx/certs"]
 
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["forego", "start", "-r"]

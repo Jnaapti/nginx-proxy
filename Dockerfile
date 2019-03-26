@@ -4,10 +4,10 @@
 #
 # NAME             jnaapti-nginx-proxy
 # VERSION          0.0.1
-# LAST_UPDATED     2016-04-16 12:45
+# LAST_UPDATED     2019-03-26
 
-FROM nginx:1.9.12
-MAINTAINER Radhakrishna radhakrishna@jnaapti.com
+FROM nginx:1.14.1
+LABEL maintainer="gautham@jnaapti.com"
 
 # Install wget and install/updates certificates
 RUN apt-get update \
@@ -25,7 +25,7 @@ RUN echo "daemon off;" >> /etc/nginx/nginx.conf \
 ADD https://github.com/jwilder/forego/releases/download/v0.16.1/forego /usr/local/bin/forego
 RUN chmod u+x /usr/local/bin/forego
 
-ENV DOCKER_GEN_VERSION 0.7.0
+ENV DOCKER_GEN_VERSION 0.7.4
 
 RUN wget https://github.com/jwilder/docker-gen/releases/download/$DOCKER_GEN_VERSION/docker-gen-linux-amd64-$DOCKER_GEN_VERSION.tar.gz \
  && tar -C /usr/local/bin -xvzf docker-gen-linux-amd64-$DOCKER_GEN_VERSION.tar.gz \

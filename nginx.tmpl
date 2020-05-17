@@ -77,15 +77,15 @@ server {
 	        {{ $addrLen := len $container.Addresses }}
 	        {{ range $address := $container.Addresses }}
 			{{ if $address.IP }}
-			        upstream {{ $host }}-{{ $address.Port }}.{{ $dockerhost }} {
+			        upstream {{ $host }}-{{ $address.Port }}-{{ $container.Env.LAB_ID }}.{{ $dockerhost }} {
 				        # {{$container.Name}}
 				        server {{ $address.IP }}:{{ $address.Port }};
 			        }
 			        server {
-			            server_name {{ $host }}-{{ $address.Port }}.{{ $dockerhost }};
+			            server_name {{ $host }}-{{ $address.Port }}-{{ $container.Env.LAB_ID }}.{{ $dockerhost }};
 	
 			            location / {
-	                		proxy_pass http://{{ $host }}-{{ $address.Port }}.{{ $dockerhost }};
+	                		proxy_pass http://{{ $host }}-{{ $address.Port }}-{{ $container.Env.LAB_ID }}.{{ $dockerhost }};
 			                {{ if (exists (printf "/etc/nginx/htpasswd/%s" $host)) }}
 	                		    auth_basic      "Restricted {{ $host }}-{{ $address.Port}}";
 			                    auth_basic_user_file    {{ (printf "/etc/nginx/htpasswd/%s" $host) }};
@@ -94,7 +94,7 @@ server {
 			        }
 	
 			        server {
-			            server_name {{ $host }}-{{ $address.Port }}.{{ $dockerhost }};
+			            server_name {{ $host }}-{{ $address.Port }}-{{ $container.Env.LAB_ID }}.{{ $dockerhost }};
 			            listen 443 ssl;
 			            return 503;
 	
